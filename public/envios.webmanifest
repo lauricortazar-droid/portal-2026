@@ -9,10 +9,10 @@
   "theme_color": "#135f3c",
   "icons": [
     {
-      "src": "/logo-gdll.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }
