@@ -1,5 +1,5 @@
 import { requireChatGPTUser } from "../../chatgpt-auth";
-import { DistributionApp } from "./distribution-app";
+import { SyncedDistributionApp } from "./distribution-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +10,5 @@ export const metadata = {
 
 export default async function EnviosPage() {
   const user = await requireChatGPTUser("/administracion/envios");
-  return <DistributionApp storageNamespace={user.email.toLowerCase()} />;
+  return <SyncedDistributionApp storageNamespace={user.email.toLowerCase()} />;
 }
