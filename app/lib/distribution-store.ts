@@ -47,6 +47,12 @@ function owner(email: string) {
   return email.trim().toLowerCase();
 }
 
+function changedRows(result: unknown) {
+  if (!result || typeof result !== "object") return 0;
+  const meta = (result as { meta?: { changes?: number } }).meta;
+  return Number(meta?.changes ?? 0);
+}
+
 function asArray(value: unknown, name: keyof typeof LIMITS) {
   if (!Array.isArray(value)) throw new PortalError(`El bloque ${name} no tiene un formato válido.`);
   if (value.length > LIMITS[name]) throw new PortalError(`El bloque ${name} excede el límite permitido.`);
@@ -127,16 +133,22 @@ export async function saveDistributionWorkspace(email: string, input: unknown, e
   }
 
   if (!current) {
-    await d1().prepare(
-      `INSERT INTO distribution_workspaces (owner_email, payload_json, revision, updated_at)
+    const result = await d1().prepare(
+      `INSERT OR IGNORE INTO distribution_workspaces (owner_email, payload_json, revision, updated_at)
        VALUES (?, ?, 1, CURRENT_TIMESTAMP)`
     ).bind(normalizedOwner, serialized).run();
+    if (changedRows(result) === 0) {
+      throw new PortalError("Hay cambios más recientes en otro dispositivo. Elige cuál versión conservar.", 409);
+    }
   } else {
-    await d1().prepare(
+    const result = await d1().prepare(
       `UPDATE distribution_workspaces
        SET payload_json = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
        WHERE owner_email = ? AND revision = ?`
     ).bind(serialized, normalizedOwner, currentRevision).run();
+    if (changedRows(result) === 0) {
+      throw new PortalError("Hay cambios más recientes en otro dispositivo. Elige cuál versión conservar.", 409);
+    }
   }
 
   const row = await d1().prepare(
