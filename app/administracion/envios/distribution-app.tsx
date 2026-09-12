@@ -74,6 +74,13 @@ type AppState = {
   settings: { defaultCountryCode: string };
 };
 
+type ContactHistoryEntry = {
+  campaignId: string;
+  campaignTitle: string;
+  status: RecipientStatus;
+  date: string;
+};
+
 const STORAGE_KEY = "fgdll-whatsapp-distributor-v1";
 const emptyState: AppState = {
   contacts: [],
@@ -190,6 +197,13 @@ function progressFor(campaign: Campaign) {
   return { sent, pending, processed, percent, total: campaign.recipients.length };
 }
 
+function statusLabel(status: RecipientStatus) {
+  if (status === "sent") return "Enviado";
+  if (status === "skipped") return "Omitido";
+  if (status === "error") return "Error";
+  return "Pendiente";
+}
+
 function Icon({ name }: { name: "home" | "send" | "people" | "message" | "more" | "plus" | "search" | "back" | "check" }) {
   const paths: Record<string, React.ReactNode> = {
     home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/></>,
@@ -205,7 +219,8 @@ function Icon({ name }: { name: "home" | "send" | "people" | "message" | "more" 
   return <svg className="wa-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
-export function DistributionApp() {
+export function DistributionApp({ storageNamespace }: { storageNamespace: string }) {
+  const storageKey = useMemo(() => `${STORAGE_KEY}:${storageNamespace}`, [storageNamespace]);
   const [state, setState] = useState<AppState>(emptyState);
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<View>("home");
@@ -229,17 +244,20 @@ export function DistributionApp() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    setReady(false);
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setState({ ...emptyState, ...JSON.parse(saved) });
-    } catch { /* keep empty state */ }
+      const saved = localStorage.getItem(storageKey);
+      setState(saved ? { ...emptyState, ...JSON.parse(saved) } : emptyState);
+    } catch {
+      setState(emptyState);
+    }
     setReady(true);
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
     if (!ready) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state, ready]);
+    localStorage.setItem(storageKey, JSON.stringify(state));
+  }, [state, ready, storageKey]);
 
   useEffect(() => {
     if (!toast) return;
@@ -248,7 +266,7 @@ export function DistributionApp() {
   }, [toast]);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw-whatsapp.js").catch(() => undefined);
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw-whatsapp.js", { scope: "/administracion/envios/" }).catch(() => undefined);
   }, []);
 
   const activeContacts = useMemo(() => state.contacts.filter((c) => !c.archived), [state.contacts]);
@@ -288,12 +306,13 @@ export function DistributionApp() {
       notes: String(form.get("notes") || "").trim(),
       status: String(form.get("status") || "active") as ContactStatus,
     };
-    setState((current) => ({ ...current, contacts: editingContactId
+    setState((current) => ({ ...current, contacts: editingContactId && editingContactId !== "new"
       ? current.contacts.map((c) => c.id === editingContactId ? { ...c, ...payload, updatedAt: now() } : c)
       : [{ id: uid("contact"), ...payload, archived: false, createdAt: now(), updatedAt: now(), lastMessageAt: null }, ...current.contacts] }));
+    const wasEditing = editingContactId && editingContactId !== "new";
     setEditingContactId(null);
     event.currentTarget.reset();
-    flash(editingContactId ? "Contacto actualizado." : "Contacto guardado.");
+    flash(wasEditing ? "Contacto actualizado." : "Contacto guardado.");
   }
 
   function archiveContact(id: string) {
@@ -303,27 +322,25 @@ export function DistributionApp() {
   }
 
   function importRows(rows: ReturnType<typeof parseRows>) {
-    let added = 0, duplicates = 0, invalid = 0;
-    setState((current) => {
-      const known = new Set(current.contacts.map((c) => normalizePhone(c.phone, c.countryCode, current.settings.defaultCountryCode)).filter(Boolean));
-      const next = [...current.contacts];
-      for (const row of rows) {
-        const normalized = normalizePhone(row.phone, "", current.settings.defaultCountryCode);
-        if (!normalized || normalized.length < 8 || normalized.length > 15) { invalid++; continue; }
-        if (known.has(normalized)) { duplicates++; continue; }
-        known.add(normalized);
-        next.unshift({
-          id: uid("contact"), firstName: row.firstName, lastName: row.lastName, phone: row.phone,
-          countryCode: current.settings.defaultCountryCode, organization: "", group: row.group, zone: row.zone,
-          tags: [], notes: "", status: "active", archived: false, createdAt: now(), updatedAt: now(), lastMessageAt: null,
-        });
-        added++;
-      }
-      return { ...current, contacts: next };
-    });
+    const known = new Set(state.contacts.map((c) => normalizePhone(c.phone, c.countryCode, state.settings.defaultCountryCode)).filter(Boolean));
+    const additions: Contact[] = [];
+    let duplicates = 0;
+    let invalid = 0;
+    for (const row of rows) {
+      const normalized = normalizePhone(row.phone, "", state.settings.defaultCountryCode);
+      if (!normalized || normalized.length < 8 || normalized.length > 15) { invalid++; continue; }
+      if (known.has(normalized)) { duplicates++; continue; }
+      known.add(normalized);
+      additions.push({
+        id: uid("contact"), firstName: row.firstName, lastName: row.lastName, phone: row.phone,
+        countryCode: state.settings.defaultCountryCode, organization: "", group: row.group, zone: row.zone,
+        tags: [], notes: "", status: "active", archived: false, createdAt: now(), updatedAt: now(), lastMessageAt: null,
+      });
+    }
+    setState((current) => ({ ...current, contacts: [...additions.reverse(), ...current.contacts] }));
     setImportText("");
     setImportOpen(false);
-    flash(`${added} agregados · ${duplicates} duplicados · ${invalid} inválidos`);
+    flash(`${additions.length} agregados · ${duplicates} duplicados · ${invalid} inválidos`);
   }
 
   function handleCsv(event: ChangeEvent<HTMLInputElement>) {
@@ -344,7 +361,7 @@ export function DistributionApp() {
       category: String(form.get("category") || "General").trim() || "General",
     };
     if (!payload.body) { flash("Escribe el mensaje."); return; }
-    setState((current) => ({ ...current, templates: editingTemplateId
+    setState((current) => ({ ...current, templates: editingTemplateId && editingTemplateId !== "new"
       ? current.templates.map((t) => t.id === editingTemplateId ? { ...t, ...payload, updatedAt: now() } : t)
       : [{ id: uid("tpl"), ...payload, createdAt: now(), updatedAt: now() }, ...current.templates] }));
     setEditingTemplateId(null);
@@ -358,7 +375,7 @@ export function DistributionApp() {
     const name = String(form.get("name") || "").trim();
     const ids = form.getAll("contactIds").map(String);
     if (!name) { flash("Ponle un nombre a la lista."); return; }
-    setState((current) => ({ ...current, lists: editingListId
+    setState((current) => ({ ...current, lists: editingListId && editingListId !== "new"
       ? current.lists.map((list) => list.id === editingListId ? { ...list, name, contactIds: ids, updatedAt: now() } : list)
       : [{ id: uid("list"), name, contactIds: ids, createdAt: now(), updatedAt: now() }, ...current.lists] }));
     setEditingListId(null);
@@ -424,7 +441,6 @@ export function DistributionApp() {
     const recipient = activeCampaign.recipients[runnerIndex];
     if (!recipient) return;
     const stamp = now();
-    let nextIndex = runnerIndex;
     setState((current) => {
       const campaigns = current.campaigns.map((campaign) => {
         if (campaign.id !== activeCampaign.id) return campaign;
@@ -435,12 +451,12 @@ export function DistributionApp() {
       const contacts = status === "sent" && recipient.contactId ? current.contacts.map((c) => c.id === recipient.contactId ? { ...c, lastMessageAt: stamp, updatedAt: stamp } : c) : current.contacts;
       return { ...current, campaigns, contacts };
     });
-    if (status !== "pending") {
+    if (status !== "pending" && status !== "error") {
       const later = activeCampaign.recipients.findIndex((r, index) => index > runnerIndex && (r.status === "pending" || r.status === "error"));
       const earlier = activeCampaign.recipients.findIndex((r) => r.status === "pending" || r.status === "error");
-      nextIndex = later >= 0 ? later : earlier >= 0 ? earlier : runnerIndex;
-      setRunnerIndex(nextIndex);
+      setRunnerIndex(later >= 0 ? later : earlier >= 0 ? earlier : runnerIndex);
     }
+    if (status === "error") flash("Marcado con error. Puedes reintentarlo después.");
   }
 
   function openWhatsApp() {
@@ -476,6 +492,10 @@ export function DistributionApp() {
   const editingContact = state.contacts.find((c) => c.id === editingContactId);
   const editingTemplate = state.templates.find((t) => t.id === editingTemplateId);
   const editingList = state.lists.find((l) => l.id === editingListId);
+  const editingHistory: ContactHistoryEntry[] = editingContact ? state.campaigns.flatMap((campaign) => campaign.recipients
+    .filter((recipient) => recipient.contactId === editingContact.id)
+    .map((recipient) => ({ campaignId: campaign.id, campaignTitle: campaign.title, status: recipient.status, date: recipient.updatedAt })))
+    .sort((a, b) => b.date.localeCompare(a.date)) : [];
 
   return (
     <main className="wa-app">
@@ -557,7 +577,7 @@ export function DistributionApp() {
                 <textarea className="wa-big-textarea" value={importText} onChange={(e) => setImportText(e.target.value)} placeholder={"Nombre | Teléfono | Zona | Grupo\nLaura | 9991234567 | Jaguar | La Cuna\nPedro | 9997654321 | Tiburón | Amanecer"} />
                 <div className="wa-sheet-actions"><button className="wa-secondary" onClick={() => fileInput.current?.click()}>Cargar CSV</button><button className="wa-primary" onClick={() => importRows(parseRows(importText))}>Revisar e importar</button></div>
                 <input ref={fileInput} type="file" accept=".csv,text/csv,text/plain" hidden onChange={handleCsv} />
-              </> : <ContactForm contact={editingContactId === "new" ? undefined : editingContact} defaultCode={state.settings.defaultCountryCode} onSubmit={saveContact} onClose={() => setEditingContactId(null)} onArchive={editingContact ? () => archiveContact(editingContact.id) : undefined} />}
+              </> : <ContactForm contact={editingContactId === "new" ? undefined : editingContact} history={editingContactId === "new" ? [] : editingHistory} defaultCode={state.settings.defaultCountryCode} onSubmit={saveContact} onClose={() => setEditingContactId(null)} onArchive={editingContact ? () => archiveContact(editingContact.id) : undefined} />}
             </div>
           </div>}
 
@@ -591,12 +611,13 @@ export function DistributionApp() {
             <label className="wa-field"><span>Nombre de la campaña</span><input value={composeTitle} onChange={(e) => setComposeTitle(e.target.value)} placeholder="Ej. Aviso líderes septiembre" /></label>
             <div className="wa-field"><span>Destinatarios</span>
               <select value={selectedListId} onChange={(e) => setSelectedListId(e.target.value)}><option value="">Seleccionar una lista (opcional)</option>{state.lists.map((list) => <option value={list.id} key={list.id}>{list.name} · {list.contactIds.length}</option>)}</select>
+              {activeContacts.length > 0 && <div className="wa-select-tools"><button type="button" onClick={() => setSelectedContactIds(activeContacts.map((contact) => contact.id))}>Seleccionar todos</button><button type="button" onClick={() => setSelectedContactIds([])}>Limpiar selección</button></div>}
               <div className="wa-recipient-picker">{activeContacts.map((contact) => <label key={contact.id}><input type="checkbox" checked={selectedContactIds.includes(contact.id)} onChange={(e) => setSelectedContactIds((ids) => e.target.checked ? [...ids, contact.id] : ids.filter((id) => id !== contact.id))} /><span><b>{contact.firstName} {contact.lastName}</b><small>{contact.zone || contact.group || normalizePhone(contact.phone, contact.countryCode, state.settings.defaultCountryCode)}</small></span></label>)}</div>
             </div>
             <label className="wa-field"><span>Envío rápido · números sin guardar</span><textarea value={quickNumbers} onChange={(e) => setQuickNumbers(e.target.value)} placeholder={"9991234567\n9992345678\n9993456789"} /></label>
             <label className="wa-field"><span>Plantilla guardada</span><select defaultValue="" onChange={(e) => { const template = state.templates.find((t) => t.id === e.target.value); if (template) setComposeMessage(template.body); }}><option value="">Escribir desde cero</option>{state.templates.map((template) => <option value={template.id} key={template.id}>{template.title}</option>)}</select></label>
             <label className="wa-field"><span>Mensaje</span><textarea className="wa-message-box" value={composeMessage} onChange={(e) => setComposeMessage(e.target.value)} placeholder="Hola {nombre}, te comparto la información…" /></label>
-            <div className="wa-vars"><span>Insertar:</span>{["{nombre}","{apellido}","{grupo}","{zona}","{fecha}","{hora}","{lugar}"].map((v) => <button key={v} onClick={() => setComposeMessage((m) => `${m}${m && !m.endsWith(" ") ? " " : ""}${v}`)}>{v}</button>)}</div>
+            <div className="wa-vars"><span>Insertar:</span>{["{nombre}","{apellido}","{grupo}","{zona}","{fecha}","{hora}","{lugar}"].map((v) => <button type="button" key={v} onClick={() => setComposeMessage((m) => `${m}${m && !m.endsWith(" ") ? " " : ""}${v}`)}>{v}</button>)}</div>
             <label className="wa-field"><span>Lugar (para variable {"{lugar}"})</span><input value={composePlace} onChange={(e) => setComposePlace(e.target.value)} placeholder="Ej. La Cuna, Mérida" /></label>
           </div>
           <div className="wa-compose-summary"><div><span>DESTINATARIOS ÚNICOS</span><strong>{composeRecipients.length}</strong></div><div><span>ADVERTENCIAS</span><strong className={composeIssues.length ? "danger" : ""}>{composeIssues.length}</strong></div></div>
@@ -623,22 +644,22 @@ export function DistributionApp() {
                 <div className="wa-avatar xl">{(recipient.firstName[0] || "#").toUpperCase()}</div>
                 <h1>{recipient.firstName || "Contacto"} {recipient.lastName}</h1>
                 <a href={`tel:+${number}`}>+{number}</a>
-                <div className={`wa-status-pill ${recipient.status}`}>{recipient.status === "sent" ? "Enviado" : recipient.status === "skipped" ? "Omitido" : recipient.status === "error" ? "Error" : "Pendiente"}</div>
+                <div className={`wa-status-pill ${recipient.status}`}>{statusLabel(recipient.status)}</div>
               </article>
               <div className="wa-message-preview"><span>MENSAJE PREPARADO</span><p>{rendered}</p><button onClick={async () => { await copyText(rendered); flash("Mensaje copiado."); }}>Copiar mensaje</button></div>
               <button className="wa-whatsapp wa-full wa-xl" onClick={openWhatsApp}>ABRIR EN WHATSAPP</button>
               <button className="wa-primary wa-full wa-xl" onClick={() => updateRecipient("sent")}><Icon name="check" /> MARCAR ENVIADO Y SIGUIENTE</button>
-              <div className="wa-runner-actions"><button onClick={() => updateRecipient("skipped")}>Omitir</button><button disabled={runnerIndex === 0} onClick={() => setRunnerIndex((index) => Math.max(0, index - 1))}>Atrás</button><button onClick={() => updateRecipient("pending")}>Volver a pendiente</button></div>
+              <div className="wa-runner-actions"><button onClick={() => updateRecipient("skipped")}>Omitir</button><button onClick={() => updateRecipient("error")}>Error</button><button disabled={runnerIndex === 0} onClick={() => setRunnerIndex((index) => Math.max(0, index - 1))}>Atrás</button><button onClick={() => updateRecipient("pending")}>Volver a pendiente</button></div>
               <details className="wa-recipient-queue"><summary>Ver cola de destinatarios</summary>{activeCampaign.recipients.map((r, index) => <button className={index === runnerIndex ? "active" : ""} key={r.id} onClick={() => setRunnerIndex(index)}><span>{index + 1}. {r.firstName || r.phone}</span><b>{r.status === "sent" ? "✓" : r.status === "skipped" ? "→" : r.status === "error" ? "!" : "○"}</b></button>)}</details>
             </>}
           </>;
         })()}
 
         {view === "more" && <>
-          <div className="wa-page-heading compact"><span>CONFIGURACIÓN</span><h1>Privacidad y respaldo.</h1><p>Esta primera versión guarda contactos y campañas únicamente en este dispositivo y dentro de tu sesión protegida del portal.</p></div>
+          <div className="wa-page-heading compact"><span>CONFIGURACIÓN</span><h1>Privacidad y respaldo.</h1><p>Esta primera versión guarda contactos y campañas únicamente en este dispositivo, separados por la cuenta que inició sesión en el portal.</p></div>
           <section className="wa-settings-card"><label className="wa-field"><span>Código de país predeterminado</span><div className="wa-prefix-input"><b>+</b><input inputMode="numeric" value={state.settings.defaultCountryCode} onChange={(e) => setState((current) => ({ ...current, settings: { ...current.settings, defaultCountryCode: cleanDigits(e.target.value) } }))} /></div><small>México: 52. Se usa cuando pegas números de 10 dígitos.</small></label></section>
           <section className="wa-stats-grid"><div><strong>{stats.campaigns}</strong><span>Campañas</span></div><div><strong>{stats.managed}</strong><span>Enviados</span></div><div><strong>{stats.pending}</strong><span>Pendientes</span></div><div><strong>{stats.reached}</strong><span>Contactos alcanzados</span></div></section>
-          <section className="wa-settings-card"><h3>Tus datos</h3><button className="wa-secondary wa-full" onClick={exportContactsCsv}>Exportar contactos CSV</button><button className="wa-secondary wa-full" onClick={exportBackup}>Descargar respaldo completo</button><button className="wa-danger wa-full" onClick={() => { if (window.confirm("Esto eliminará contactos, listas, plantillas y campañas guardadas en este dispositivo. No se puede deshacer.")) { localStorage.removeItem(STORAGE_KEY); setState(emptyState); flash("Datos locales eliminados."); } }}>Eliminar todos los datos locales</button></section>
+          <section className="wa-settings-card"><h3>Tus datos</h3><button className="wa-secondary wa-full" onClick={exportContactsCsv}>Exportar contactos CSV</button><button className="wa-secondary wa-full" onClick={exportBackup}>Descargar respaldo completo</button><button className="wa-danger wa-full" onClick={() => { if (window.confirm("Esto eliminará contactos, listas, plantillas y campañas guardadas para esta cuenta en este dispositivo. No se puede deshacer.")) { localStorage.removeItem(storageKey); setState(emptyState); flash("Datos locales eliminados."); } }}>Eliminar todos los datos locales</button></section>
           <section className="wa-privacy-note"><strong>Qué no hace esta app</strong><p>No lee tus chats, no pulsa Enviar, no automatiza WhatsApp y no almacena conversaciones privadas. El envío final siempre depende de ti.</p></section>
         </>}
       </section>
@@ -659,7 +680,7 @@ function Empty({ title, text }: { title: string; text: string }) {
   return <div className="wa-empty"><span>○</span><strong>{title}</strong><p>{text}</p></div>;
 }
 
-function ContactForm({ contact, defaultCode, onSubmit, onClose, onArchive }: { contact?: Contact; defaultCode: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void; onArchive?: () => void }) {
+function ContactForm({ contact, history, defaultCode, onSubmit, onClose, onArchive }: { contact?: Contact; history: ContactHistoryEntry[]; defaultCode: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void; onArchive?: () => void }) {
   return <form onSubmit={onSubmit}>
     <div className="wa-sheet-head"><div><span>CONTACTO</span><h2>{contact ? "Editar contacto" : "Nuevo contacto"}</h2></div><button type="button" onClick={onClose}>×</button></div>
     <div className="wa-form-grid two"><label className="wa-field"><span>Nombre</span><input name="firstName" defaultValue={contact?.firstName} required /></label><label className="wa-field"><span>Apellido</span><input name="lastName" defaultValue={contact?.lastName} /></label></div>
@@ -669,7 +690,7 @@ function ContactForm({ contact, defaultCode, onSubmit, onClose, onArchive }: { c
     <label className="wa-field"><span>Etiquetas</span><input name="tags" defaultValue={contact?.tags.join(", ")} placeholder="Líder, activo, consejo" /></label>
     <label className="wa-field"><span>Notas</span><textarea name="notes" defaultValue={contact?.notes} /></label>
     <label className="wa-field"><span>Estado</span><select name="status" defaultValue={contact?.status || "active"}><option value="active">Activo</option><option value="inactive">Inactivo</option></select></label>
-    {contact?.lastMessageAt && <p className="wa-help">Último mensaje gestionado: {new Date(contact.lastMessageAt).toLocaleString("es-MX")}</p>}
+    {contact && <div className="wa-contact-history"><div><span>HISTORIAL</span><strong>{history.length} comunicaciones gestionadas</strong></div>{history.length === 0 ? <p>Aún no hay envíos registrados para este contacto.</p> : history.slice(0, 10).map((entry) => <button type="button" key={`${entry.campaignId}-${entry.date}`} className="wa-history-row"><span><b>{entry.campaignTitle}</b><small>{new Date(entry.date).toLocaleString("es-MX")}</small></span><em className={entry.status}>{statusLabel(entry.status)}</em></button>)}</div>}
     <div className="wa-sheet-actions">{onArchive && <button className="wa-danger" type="button" onClick={onArchive}>Archivar</button>}<button className="wa-primary" type="submit">Guardar contacto</button></div>
   </form>;
 }
