@@ -18,11 +18,29 @@ const LIMITS = {
   campaigns: 1_500,
   recipientsPerCampaign: 10_000,
 };
+let workspaceTableReady = false;
 
 function d1() {
   const database = getRuntimeEnv().DB;
   if (!database) throw new PortalError("La base de datos del portal no está disponible.", 503);
   return database;
+}
+
+async function ensureWorkspaceTable() {
+  if (workspaceTableReady) return;
+  const database = d1();
+  await database.prepare(
+    `CREATE TABLE IF NOT EXISTS distribution_workspaces (
+      owner_email TEXT PRIMARY KEY NOT NULL,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      revision INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`
+  ).run();
+  await database.prepare(
+    "CREATE INDEX IF NOT EXISTS distribution_workspaces_updated_idx ON distribution_workspaces (updated_at)"
+  ).run();
+  workspaceTableReady = true;
 }
 
 function owner(email: string) {
@@ -76,6 +94,7 @@ function sanitizeWorkspaceState(input: unknown) {
 }
 
 export async function getDistributionWorkspace(email: string): Promise<DistributionWorkspaceRecord> {
+  await ensureWorkspaceTable();
   const row = await d1().prepare(
     "SELECT payload_json, revision, updated_at FROM distribution_workspaces WHERE owner_email = ?"
   ).bind(owner(email)).first<Record<string, unknown>>();
@@ -95,6 +114,7 @@ export async function getDistributionWorkspace(email: string): Promise<Distribut
 }
 
 export async function saveDistributionWorkspace(email: string, input: unknown, expectedRevision?: number) {
+  await ensureWorkspaceTable();
   const { normalized, serialized } = sanitizeWorkspaceState(input);
   const normalizedOwner = owner(email);
   const current = await d1().prepare(
@@ -131,5 +151,6 @@ export async function saveDistributionWorkspace(email: string, input: unknown, e
 }
 
 export async function deleteDistributionWorkspace(email: string) {
+  await ensureWorkspaceTable();
   await d1().prepare("DELETE FROM distribution_workspaces WHERE owner_email = ?").bind(owner(email)).run();
 }
