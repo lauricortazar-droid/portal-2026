@@ -211,3 +211,12 @@ export const groupRegistrationRequests = sqliteTable("group_registration_request
   index("group_registration_status_idx").on(table.status, table.zone, table.createdAt),
   index("group_registration_requester_idx").on(table.requesterEmail, table.createdAt),
 ]);
+
+export const distributionWorkspaces = sqliteTable("distribution_workspaces", {
+  ownerEmail: text("owner_email").primaryKey(),
+  payloadJson: text("payload_json").notNull().default("{}"),
+  revision: integer("revision").notNull().default(1),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("distribution_workspaces_updated_idx").on(table.updatedAt),
+]);
