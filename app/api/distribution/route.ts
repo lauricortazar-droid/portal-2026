@@ -29,7 +29,8 @@ export async function PUT(request: Request) {
     requireSameOrigin(request);
     const { user } = await requireApiProfile();
     const body = await readJson(request);
-    const workspace = await saveDistributionWorkspace(user.email, body.state);
+    const revision = typeof body.revision === "number" ? body.revision : undefined;
+    const workspace = await saveDistributionWorkspace(user.email, body.state, revision);
     return Response.json(workspace, { headers: privateHeaders });
   } catch (error) {
     return apiError(error);
