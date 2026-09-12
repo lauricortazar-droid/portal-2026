@@ -36,10 +36,11 @@ export function AdministrationDashboard() {
     <section className="section administration-actions"><div className="shell"><div className="section-heading split-heading"><div><span className="eyebrow">Centro de gestión</span><h2>Elige la acción que necesitas.</h2></div><p>Las modificaciones sensibles conservan folio, autor, fecha y estado de revisión.</p></div><div className="administration-card-grid">
       <Link href="/directorio/gestion"><span>01</span><small>DIRECTORIO</small><h3>{canReview ? "Administrar grupos y propuestas" : "Actualizar datos de mi grupo"}</h3><p>{canReview ? "Revisa grupos bajo tu alcance, cambios pendientes y expedientes." : "Corrige datos operativos o envía cambios sensibles a aprobación."}</p><b>Abrir gestión →</b></Link>
       <Link href="/administracion/registrar-grupo"><span>02</span><small>ALTA INSTITUCIONAL</small><h3>Registrar un grupo por primera vez</h3><p>Captura ubicación, responsables, contactos, horarios y canales oficiales.</p><b>Iniciar registro →</b></Link>
-      {canReview && <Link href="/administracion/registrar-grupo#revision"><span>03</span><small>REVISIÓN</small><h3>Solicitudes de nuevos grupos</h3><p>Solicita correcciones, aprueba o rechaza registros dentro de tus facultades.</p><b>Revisar solicitudes →</b></Link>}
-      {canReviewAccess && <Link href="/directorio/gestion"><span>04</span><small>ACCESOS</small><h3>Solicitudes y usuarios</h3><p>Consulta expedientes de acceso, correcciones y resoluciones del portal.</p><b>Abrir expedientes →</b></Link>}
-      {isAdmin && <Link href="/administracion/contenidos"><span>05</span><small>CONTENIDOS</small><h3>Noticias, materiales y testimonios</h3><p>Publica, edita, archiva o elimina contenido institucional.</p><b>Administrar contenido →</b></Link>}
-      {isAdmin && <Link href="/administracion/experiencias"><span>06</span><small>PROGRAMACIÓN</small><h3>Experiencias del mes</h3><p>Actualiza fechas, sedes y escrituras disponibles por zona.</p><b>Gestionar experiencias →</b></Link>}
+      <Link href="/administracion/envios"><span>03</span><small>MENSAJERÍA</small><h3>Distribuir mensajes por WhatsApp</h3><p>Prepara una vez, recorre destinatarios uno por uno y conserva el progreso del envío.</p><b>Abrir asistente →</b></Link>
+      {canReview && <Link href="/administracion/registrar-grupo#revision"><span>04</span><small>REVISIÓN</small><h3>Solicitudes de nuevos grupos</h3><p>Solicita correcciones, aprueba o rechaza registros dentro de tus facultades.</p><b>Revisar solicitudes →</b></Link>}
+      {canReviewAccess && <Link href="/directorio/gestion"><span>05</span><small>ACCESOS</small><h3>Solicitudes y usuarios</h3><p>Consulta expedientes de acceso, correcciones y resoluciones del portal.</p><b>Abrir expedientes →</b></Link>}
+      {isAdmin && <Link href="/administracion/contenidos"><span>06</span><small>CONTENIDOS</small><h3>Noticias, materiales y testimonios</h3><p>Publica, edita, archiva o elimina contenido institucional.</p><b>Administrar contenido →</b></Link>}
+      {isAdmin && <Link href="/administracion/experiencias"><span>07</span><small>PROGRAMACIÓN</small><h3>Experiencias del mes</h3><p>Actualiza fechas, sedes y escrituras disponibles por zona.</p><b>Gestionar experiencias →</b></Link>}
     </div></div></section>
     {isAdmin && <section className="section operations-center"><div className="shell"><div className="section-heading split-heading"><div><span className="eyebrow light">FGDLL — Sistema Institucional</span><h2>El centro de operaciones, organizado por responsabilidad.</h2></div><p>Esta vista reúne la estructura que después puede mantenerse desde ChatGPT Work sin mezclarla con la experiencia pública.</p></div><div className="operations-grid">
       <article><span>01</span><h3>Dirección y Consejo</h3><p>Gobernanza, decisiones, organigrama y políticas.</p></article>
@@ -49,9 +50,10 @@ export function AdministrationDashboard() {
       <Link href="/centros"><span>05</span><h3>Centros</h3><p>Directorio y atención residencial.</p></Link>
       <Link href="/etica"><span>06</span><h3>Ética y Educación</h3><p>Derechos, protocolos y formación ética.</p></Link>
       <Link href="/administracion/contenidos"><span>07</span><h3>Comunicación</h3><p>Comunicados, campañas y materiales.</p></Link>
-      <Link href="/administracion"><span>08</span><h3>Administración</h3><p>Altas, bajas, correcciones y seguimiento.</p></Link>
-      <Link href="/"><span>09</span><h3>Portal FGDLL</h3><p>Contenido público y publicación institucional.</p></Link>
-      <article><span>10</span><h3>Archivo Institucional</h3><p>Versiones anteriores e historia documental.</p></article>
+      <Link href="/administracion/envios"><span>08</span><h3>Mensajería</h3><p>Campañas y distribución asistida por WhatsApp.</p></Link>
+      <Link href="/administracion"><span>09</span><h3>Administración</h3><p>Altas, bajas, correcciones y seguimiento.</p></Link>
+      <Link href="/"><span>10</span><h3>Portal FGDLL</h3><p>Contenido público y publicación institucional.</p></Link>
+      <article><span>11</span><h3>Archivo Institucional</h3><p>Versiones anteriores e historia documental.</p></article>
     </div></div></section>}
     <section className="administration-rules"><div className="shell"><div><span>CAMBIO DIRECTO</span><h3>Datos operativos</h3><p>Contactos, dirección, mapa, horarios y redes pueden actualizarse según el alcance del perfil.</p></div><div><span>REQUIERE APROBACIÓN</span><h3>Datos sensibles</h3><p>Nombre del grupo, zona, líder y estado institucional conservan revisión antes de publicarse.</p></div><div><span>SIEMPRE REGISTRADO</span><h3>Auditoría</h3><p>Cada alta, modificación y resolución deja un folio para consultar el historial.</p></div></div></section>
   </main><SubFooter /></>;
