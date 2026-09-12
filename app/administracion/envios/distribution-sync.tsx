@@ -47,6 +47,18 @@ export function SyncedDistributionApp({ storageNamespace }: { storageNamespace: 
   const savingRef = useRef(false);
   const conflictRef = useRef(false);
 
+  useEffect(() => {
+    const originalConfirm = window.confirm.bind(window);
+    window.confirm = (message?: string) => {
+      const text = String(message ?? "");
+      if (text.startsWith("Esto eliminará contactos, listas, plantillas y campañas guardadas")) {
+        return originalConfirm("Esto eliminará contactos, listas, plantillas y campañas sincronizados para esta cuenta en todos tus dispositivos. No se puede deshacer.");
+      }
+      return originalConfirm(text);
+    };
+    return () => { window.confirm = originalConfirm; };
+  }, []);
+
   const rememberSync = useCallback((revision: number, hash: string, updatedAt: string | null) => {
     revisionRef.current = revision;
     lastSyncedHashRef.current = hash;
