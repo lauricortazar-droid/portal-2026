@@ -94,18 +94,30 @@ export async function getDistributionWorkspace(email: string): Promise<Distribut
   }
 }
 
-export async function saveDistributionWorkspace(email: string, input: unknown) {
+export async function saveDistributionWorkspace(email: string, input: unknown, expectedRevision?: number) {
   const { normalized, serialized } = sanitizeWorkspaceState(input);
   const normalizedOwner = owner(email);
+  const current = await d1().prepare(
+    "SELECT revision FROM distribution_workspaces WHERE owner_email = ?"
+  ).bind(normalizedOwner).first<Record<string, unknown>>();
+  const currentRevision = current ? Number(current.revision ?? 0) : 0;
 
-  await d1().prepare(
-    `INSERT INTO distribution_workspaces (owner_email, payload_json, revision, updated_at)
-     VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-     ON CONFLICT(owner_email) DO UPDATE SET
-       payload_json = excluded.payload_json,
-       revision = distribution_workspaces.revision + 1,
-       updated_at = CURRENT_TIMESTAMP`
-  ).bind(normalizedOwner, serialized).run();
+  if (Number.isFinite(expectedRevision) && Number(expectedRevision) !== currentRevision) {
+    throw new PortalError("Hay cambios más recientes en otro dispositivo. Elige cuál versión conservar.", 409);
+  }
+
+  if (!current) {
+    await d1().prepare(
+      `INSERT INTO distribution_workspaces (owner_email, payload_json, revision, updated_at)
+       VALUES (?, ?, 1, CURRENT_TIMESTAMP)`
+    ).bind(normalizedOwner, serialized).run();
+  } else {
+    await d1().prepare(
+      `UPDATE distribution_workspaces
+       SET payload_json = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+       WHERE owner_email = ? AND revision = ?`
+    ).bind(serialized, normalizedOwner, currentRevision).run();
+  }
 
   const row = await d1().prepare(
     "SELECT revision, updated_at FROM distribution_workspaces WHERE owner_email = ?"
