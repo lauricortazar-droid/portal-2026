@@ -54,6 +54,23 @@
   cursor: pointer;
 }
 
+/* La pantalla Más heredó texto del MVP local. Se reemplaza visualmente mientras
+   la lógica original permanece estable y la capa D1 controla la sincronización. */
+.wa-page-heading.compact:has(+ .wa-settings-card) p { display: none; }
+.wa-page-heading.compact:has(+ .wa-settings-card)::after {
+  content: "Tus contactos, listas, plantillas y campañas se sincronizan con tu cuenta del portal y conservan una copia local para trabajar si la conexión falla.";
+  display: block;
+  margin-top: 10px;
+  color: var(--wa-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.wa-stats-grid + .wa-settings-card .wa-danger { font-size: 0; }
+.wa-stats-grid + .wa-settings-card .wa-danger::after {
+  content: "Eliminar todos los datos";
+  font-size: 12px;
+}
+
 @media (max-width: 560px) {
   .wa-cloud-status small { display: none; }
   .wa-sync-conflict > div { grid-template-columns: 1fr; }
