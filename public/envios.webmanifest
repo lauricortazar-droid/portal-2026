@@ -1,0 +1,18 @@
+{
+  "name": "FGDLL Envíos",
+  "short_name": "Envíos",
+  "description": "Asistente privado para preparar y distribuir mensajes contacto por contacto mediante WhatsApp.",
+  "start_url": "/administracion/envios",
+  "scope": "/administracion/envios",
+  "display": "standalone",
+  "background_color": "#f5f6f4",
+  "theme_color": "#135f3c",
+  "icons": [
+    {
+      "src": "/logo-gdll.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
