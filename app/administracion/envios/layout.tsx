@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { ProtectedAccess } from "../../protected-access";
 import "./envios.css";
 import "./envios-fixes.css";
+import "./envios-sync.css";
 
 export const dynamic = "force-dynamic";
 
